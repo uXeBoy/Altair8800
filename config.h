@@ -25,28 +25,28 @@
 #define MAX_BREAKPOINTS 0
 
 
-// Setting USE_PROFILING_DETAIL to 1 will (every 10 seconds) show a 
+// Setting USE_PROFILING_DETAIL to 1 will (every 10 seconds) show a
 // list of which opcodes were executed how many times (if profiling is enabled).
 // Reduces performance and uses 1k of RAM
 #define USE_PROFILING_DETAIL 0
 
 
 // Enables throttling of CPU speed. This only makes sense to enable
-// on the Due since the Mega is too slow anyways and the throttling 
+// on the Due since the Mega is too slow anyways and the throttling
 // checks would only reduce performance further.
 #define USE_THROTTLE 1
 
 
-// Maximum number of ROMs that can be added. 
-// Uses 13+(15*MAX_NUM_ROMS) bytes of RAM for organizational data. The actual 
-// ROM content is stored in the emulated RAM and therefore does not occupy any 
+// Maximum number of ROMs that can be added.
+// Uses 13+(15*MAX_NUM_ROMS) bytes of RAM for organizational data. The actual
+// ROM content is stored in the emulated RAM and therefore does not occupy any
 // additional memory on the host. Set to 0 to completely disable ROM support.
 #define MAX_NUM_ROMS 8
 
 
 // Enables support for MITS disk drives (maximum 16). Each drive uses about
 // 160 bytes of RAM. Set to 0 to completely disable drive support.
-#define NUM_DRIVES 4
+#define NUM_DRIVES 0
 
 
 // Enables support for Tarbell disk drives (maximum 4).
@@ -57,11 +57,11 @@
 // Enables support for hard disk (88-HDSK). Hard disk support uses
 // about 1100 bytes of RAM plus 56 bytes for each unit.
 // Set to 0 to completely disable hard disk support
-#define NUM_HDSK_UNITS 1
+#define NUM_HDSK_UNITS 0
 
 
 // Enables printer emulation which uses about 140 bytes of RAM.
-#define USE_PRINTER 1
+#define USE_PRINTER 0
 
 
 // Enable two 88-2SIO devices (instead of one).
@@ -71,7 +71,7 @@
 // Enables support for Cromemco Dazzler. Note that to actually see the
 // Dazzler picture you need to connect a client. See:
 // https://www.hackster.io/david-hansel/dazzler-display-for-altair-simulator-3febc6
-#define USE_DAZZLER 0
+#define USE_DAZZLER 1
 
 
 // Enables support for Processor Technology VDM-1. Note that to actually see the
@@ -119,7 +119,7 @@
 // If enabled, Address switch state will be set by issuing the '/'
 // serial command.  Actual switches will be ignored.
 // Useful when operating while not connected to the front panel hardware.
-#define STANDALONE 0
+#define STANDALONE 1
 
 
 
@@ -189,7 +189,7 @@ uint32_t config_host_serial_baud_rate(byte iface);
 uint32_t config_host_serial_config(byte iface);
 byte     config_host_serial_primary();
 
-byte     config_serial_map_sim_to_host(byte dev); 
+byte     config_serial_map_sim_to_host(byte dev);
 bool     config_serial_realtime(byte dev);
 uint32_t config_serial_playback_baud_rate(byte dev);
 byte     config_serial_playback_example_nuls(byte dev);

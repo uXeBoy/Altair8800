@@ -23,6 +23,11 @@
 #include "host.h"
 #include "serial.h"
 #include "timer.h"
+#include "TurboSPI.h"
+
+TurboSPI    g_SPI;
+DigitalPin  g_PinCS, g_PinRS;
+uint8_t     g_Divisor = 2; // transfer speed set to MCU's clock divide by 2
 
 #if USE_DAZZLER==0
 
@@ -51,49 +56,24 @@ byte dazzler_iface = 0xff;
 uint16_t dazzler_mem_start, dazzler_mem_end, dazzler_mem_size;
 volatile byte d7a_port[5];
 
+static void dazzler_send(const byte *data, uint16_t size){}
 
-static void dazzler_send(const byte *data, uint16_t size)
-{
-  if( dazzler_iface<0xff )
-    {
-      size_t n, ptr = 0;
-      while( size>0 )
-        {
-          n = host_serial_write(dazzler_iface, ((const char *) data)+ptr, size);
-          ptr  += n;
-          size -= n;
-        }
-    }
-}
-
-
-static void dazzler_send_fullframe()
-{
-  // send full picture memory
-  byte b = DAZ_FULLFRAME | (dazzler_mem_size > 512 ? 1 : 0);
-  host_serial_write(dazzler_iface, b);
-  dazzler_send(Mem+dazzler_mem_start, dazzler_mem_size > 512 ? 2048 : 512);
-}
-
+static void dazzler_send_fullframe(){}
 
 void dazzler_write_mem_(uint16_t a, byte v)
 {
-  // when dazzler is off, dazzler_mem_end=0 so we never
-  // get here (due to condition in dazzler_write_mem macro in dazzer.h)
+  static uint8_t buffer[2048];
 
-#if DEBUGLVL>0
-  printf("dazzler_write_mem(%04x, %02x)\n", a, v);
-#endif
+  a = a - dazzler_mem_start;
+  buffer[a] = ((v & 0x0F) << 4 | (v & 0xF0) >> 4);
 
-  if( Mem[a]!=v )
-    {
-      a -= dazzler_mem_start;
-      byte b[3];
-      b[0] = DAZ_MEMBYTE | ((a & 0x0700)/256) ;
-      b[1] = a & 255;
-      b[2] = v;
-      dazzler_send(b, 3);
-    }
+  g_PinCS.High();
+  g_PinRS.Low();
+  g_SPI.Send(DAZ_FULLFRAME); // VSYNC
+
+  g_PinRS.High();
+  g_PinCS.Low();
+  g_SPI.Send(buffer, sizeof(buffer));
 }
 
 
@@ -126,32 +106,6 @@ void dazzler_out_ctrl(byte v)
       int n = 0, d = a-dazzler_mem_start;
       dazzler_mem_start = a;
       dazzler_mem_end   = a + dazzler_mem_size;
-
-      // check how many bytes actually differ between the 
-      // old and new memory locations (if a program is
-      // switching quickly between two locations then likely
-      // not a large number of pixels/bytes will differ)
-      for(int i=dazzler_mem_start; i<=dazzler_mem_end; i++)
-        if( Mem[i] != Mem[i-d] )
-          n++;
-
-      if( n*3 < dazzler_mem_size )
-        {
-          // it takes less data to send a diff than the full frame
-          for(int i=dazzler_mem_start; i<dazzler_mem_end; i++)
-            if( Mem[i] != Mem[i-d] )
-              {
-                b[0] = DAZ_MEMBYTE | (((i-dazzler_mem_start) & 0x0700)/256) ;
-                b[1] = i & 255;
-                b[2] = Mem[i];
-                dazzler_send(b, 3);
-              }
-        }
-      else
-        {
-          // sending full frame is shorter
-          dazzler_send_fullframe();
-        }
     }
 }
 
@@ -177,7 +131,7 @@ void dazzler_out_pict(byte v)
   dazzler_send(b, 2);
 
   uint16_t s = v & 0x20 ? 2048 : 512;
-  if( s > dazzler_mem_size ) 
+  if( s > dazzler_mem_size )
     {
       dazzler_mem_size = s;
       dazzler_send_fullframe();
@@ -216,7 +170,7 @@ void dazzler_receive(byte iface, byte data)
           case DAZ_JOY1:
             set_d7a_port(0, (d7a_port[0] & 0xF0) | (data & 0x0F));
             break;
-            
+
           case DAZ_JOY2:
             set_d7a_port(0, (d7a_port[0] & 0x0F) | ((data & 0x0F)*16));
             break;
@@ -271,7 +225,7 @@ byte dazzler_in(byte port)
       // signals don't get stuck.
       // If I understand correctly, the Dazzler does not
       // interlace two fields and instead counts each field
-      // (half-frame) as a full frame (of 262 lines). Therefore 
+      // (half-frame) as a full frame (of 262 lines). Therefore
       // its frame rate is 29.97 * 2 = 59.94Hz, i.e. 16683us per frame,
       // i.e. 33367 cycles per frame.
       const uint32_t cycles_per_frame = 33367;
@@ -298,7 +252,7 @@ byte dazzler_in(byte port)
       // it in the Dazzler emulation to support joysticks
       v = d7a_port[port-0030];
     }
-  
+
 #if DEBUGLVL>1
   printf("%04x: dazzler_in(%i)=%02x\n", regPC, port, v);
 #endif
@@ -315,11 +269,11 @@ void dazzler_set_iface(byte iface)
     {
       // if we had an interface set, restore that interface's previous receive callback
       if( dazzler_iface<0xff ) host_serial_set_receive_callback(dazzler_iface, fprev);
-      
+
       // set receive callback
       dazzler_iface = iface;
       fprev = host_serial_set_receive_callback(dazzler_iface, dazzler_receive);
-      
+
 #if DEBUGLVL>0
       if( iface==0xff ) Serial.println("Dazzler disabled"); else {Serial.print("Dazzler on interface:"); Serial.println(iface);}
 #endif
@@ -335,6 +289,17 @@ byte dazzler_get_iface()
 
 void dazzler_setup()
 {
+  // setup pins
+  g_PinCS.Begin(9);
+  g_PinRS.Begin(8);
+
+  g_PinCS.PinMode(OUTPUT);
+  g_PinRS.PinMode(OUTPUT);
+
+  // setup SPI
+  g_SPI.Begin();
+  g_SPI.Init(g_Divisor);
+
   dazzler_mem_start = 0x0000;
   dazzler_mem_end   = 0x0000;
   dazzler_mem_size  = 512;
